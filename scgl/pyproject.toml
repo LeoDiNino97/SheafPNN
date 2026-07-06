@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scgl"
+version = "0.1.0"
+description = "Structured Connection Graph Learning: sparse connection Laplacian learning with spectral constraints."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.22",
+    "scipy>=1.8",
+    "autograd>=1.5",
+    "pymanopt>=2.1",
+    "tqdm>=4.60",
+]
+
+[tool.setuptools.packages.find]
+include = ["scgl*"]

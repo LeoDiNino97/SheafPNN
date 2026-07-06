@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from layers import *
+from .layers import ConvFilter
 import torch.nn.functional as F
 
 class SPNN(nn.Module):
@@ -87,13 +87,13 @@ class SPNN(nn.Module):
                 X = F.dropout(X, p=self.dropout, training=self.training)
 
         if self.task_level == "graph":
-            # Aggregate node outputs
+            # Aggregate over Vn nodes (dim 0); X is (Vn, T, F)
             if self.node_readout == "max":
-                X = X.max(1)[0]
+                X = X.max(0)[0]
             elif self.node_readout == "mean":
-                X = X.mean(1)
+                X = X.mean(0)
             elif self.node_readout == "sum":
-                X = X.sum(1)
+                X = X.sum(0)
             else:
                 raise NotImplementedError("Node readout function not implemented")
 

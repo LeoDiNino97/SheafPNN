@@ -3,3 +3,5 @@
 
 # Ignore the pnn directory
 PNN/
+.claude/
+results/
