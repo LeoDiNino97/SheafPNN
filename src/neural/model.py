@@ -1,11 +1,46 @@
 import torch
 from torch import nn
-from .layers import ConvFilter
+# from .layers import ConvFilter
+from layers import ConvFilter
 import torch.nn.functional as F
 
 class SPNN(nn.Module):
     """
     Class for a convolutional GNN with shift operator in a Sheaf Laplacian
+
+    Arguments
+    input_size: node feature input size
+    output_size: node feature output size (if task_level==graph, node features are aggregated)
+    hidden_sizes: list of hidden sizes
+    hidden_mlp_sizes: list of readout MLP hidden sizes. The first value needs to be the same as the last
+        entry of hidden_sizes. Can be empty for no readout MLP
+
+    EXAMPLE 1:
+    input_size = 8
+    hidden_sizes = [16,32]
+    hidden_mlp_sizes = [32,64]
+    output_size = 2
+
+    This creates 2 convolutional filterbanks of shape 8->16, 16->32,
+    followed by a 2 layer readout MLP of shape 32->64, 64->2.
+
+    EXAMPLE 2: 
+    input_size = 4
+    hidden_sizes = [2]
+    hidden_mlp_sizes = []
+    output_size = 8
+
+    This creates 2 convolutional filterbanks of shape 4->2, 2->8,
+    with no readout MLP.
+
+    EXAMPLE 3: 
+    input_size = 16
+    hidden_sizes = [4]
+    hidden_mlp_sizes = [4]
+    output_size = 32
+
+    This creates 1 convolutional filterbank of shape 16->4,
+    followed by a 1 layer readout MLP of shape 4->32.
     """
 
     def __init__(
@@ -33,32 +68,33 @@ class SPNN(nn.Module):
         self.layer_norms = nn.ModuleList()
         self.batch_norms = nn.ModuleList()
         
-        first_filter_out_size = hidden_sizes[0] if hidden_sizes else output_size
         self.gfl = nn.ModuleList()
-        self.gfl.append(ConvFilter(input_size, first_filter_out_size, K, bias=bias))
-        self.batch_norms.append(nn.BatchNorm1d(first_filter_out_size).to(self.device))
-        self.layer_norms.append(nn.LayerNorm(first_filter_out_size).to(self.device))
+        self.gfl.append(ConvFilter(input_size, hidden_sizes[0], K, bias=bias))
+        self.batch_norms.append(nn.BatchNorm1d(hidden_sizes[0]))
+        self.layer_norms.append(nn.LayerNorm(hidden_sizes[0]))
             
-        if hidden_sizes:
+        if len(hidden_sizes) > 1:
             for l in range(1, len(hidden_sizes)):
                 self.gfl.append(ConvFilter(hidden_sizes[l-1], hidden_sizes[l], K, bias=bias))
-                
-                self.batch_norms.append(nn.BatchNorm1d(hidden_sizes[l]).to(self.device))
-                self.layer_norms.append(nn.LayerNorm(hidden_sizes[l]).to(self.device))
-
+                self.batch_norms.append(nn.BatchNorm1d(hidden_sizes[l]))
+                self.layer_norms.append(nn.LayerNorm(hidden_sizes[l]))
 
         self.mlp = nn.ModuleList()
-        if hidden_mlp_sizes: # we have a readout layer
-            first_linear_out_size = hidden_sizes[-1] if len(hidden_mlp_sizes) > 1 else output_size
-            self.mlp.append(nn.Linear(hidden_mlp_sizes[0], first_linear_out_size))            
-            for l in range(1, len(hidden_mlp_sizes)):
-                self.mlp.append(nn.Linear(hidden_mlp_sizes[l-1], hidden_mlp_sizes[l]))
-                self.init_weights(self.mlp[-1])
-            if len(hidden_mlp_sizes) > 1:
-                self.mlp.append(nn.Linear(hidden_mlp_sizes[-1], output_size))            
 
-        else: # no readout layer
+        for l in range(1, len(hidden_mlp_sizes)):
+            self.mlp.append(nn.Linear(hidden_mlp_sizes[l-1], hidden_mlp_sizes[l], bias=bias))
+            self.init_weights(self.mlp[-1])
+
+        if len(hidden_mlp_sizes) > 0:
+            self.mlp.append(nn.Linear(hidden_mlp_sizes[-1], output_size, bias=bias))
+            self.init_weights(self.mlp[-1])
+        else: # no MLP, just filters
             self.gfl.append(ConvFilter(hidden_sizes[-1], output_size, K, bias=bias))
+
+        # Check that layers are as expected:
+        # print([(gf.H.shape) for gf in self.gfl])
+        # print(self.mlp)
+        # input()        
 
 
     def init_weights(self, m):
@@ -110,5 +146,3 @@ class SPNN(nn.Module):
             X = X.squeeze(-1)
 
         return X
-    
-
